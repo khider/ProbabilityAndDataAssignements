@@ -1,0 +1,152 @@
+---
+title: "Exploring the BRFSS data"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+```
+
+### Load data
+Load the BRFSS data into the workspace.
+
+```{r load-data}
+load("brfss2013.RData")
+```
+
+* * *
+
+## Part 1: Data
+
+The BRFSS (Bahvorial Risk Fctor Surveillance System) objective is to collect uniform, state-specific data on preventive health practices and risks behaviors that are linked to chronic diseases, injuries, and preventable infectious diseases that affect the adult population. Factors assessed by the BRFSS in 2013 include tobacco use, HIV/AIDS knowledge and prevention, exercise, immunization, health status, healthy days — health-related quality of life, health care access, inadequate sleep, hypertension awareness, cholesterol awareness, chronic health conditions, alcohol consumption, fruits and vegetables consumption, arthritis burden, and seatbelt use. Since 2011, BRFSS conducts both landline telephone- and cellular telephone-based surveys. In conducting the BRFSS landline telephone survey, interviewers collect data from a randomly selected adult in a household. In conducting the cellular telephone version of the BRFSS questionnaire, interviewers collect data from an adult who participates by using a cellular telephone and resides in a private residence or college housing. 
+
+Health characteristics estimated from the BRFSS pertain to the non-institutionalized adult population, aged 18 years or older, who reside in the US. In 2013, additional question sets were included as optional modules to provide a measure for several childhood health and wellness indicators, including asthma prevalence for people aged 17 years or younger.
+
+As such, this observational study uses stratified sampling and is generalizable but does not allow to infer causal links. 
+
+* * *
+
+## Part 2: Research questions
+
+**Research quesion 1:** For the general population of the United States, is there a correlation between the amount of sleep and general health. Considering the importance of sleep for cognitive reasoning, I would expect some relationships between the two. 
+
+**Research quesion 2:** For the general population of the United States, is there a correlation between education level, income, and mental health. Better-paying jobs often require a formal education and this higher income can then translate into better mental health through access to healthcare, less worry about financial future, better vacation. 
+
+**Research quesion 3:** For the general population of the Uniter States, is there a correlation between employment status, Body Mass Index (from weight and height), and exercise in the past 30days. Generally speaking, people with secured employment will take better care of their body and health.
+
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+
+**Research question 1:** Relationship between sleep and general health
+
+```{r}
+#Remove outliers (can't really sleep more than 24hours)
+sleeptime <- filter(brfss2013, sleptim1<=24)
+
+# Summarize the data
+healthSleep <- sleeptime %>%
+    group_by(genhlth) %>%
+    summarise(meanSleep = mean(sleptim1))
+
+#Plot the general health/mean of sleep time
+ggplot(healthSleep, aes(genhlth, meanSleep)) + geom_point(aes(genhlth, meanSleep)) +
+    labs(title="mean hours of sleep for each health category", x = 'general health', y='hours of sleep')
+
+```
+ From the plot above, there appears to be a general correlation between health and the amount of sleep. 
+
+
+**Research question 2:** Relationship between education level, income level, and mental health
+
+```{r}
+# Remove nas
+data <- filter(brfss2013, !is.na(menthlth), !is.na(income2), !is.na(educa))
+
+#Make sure that number of days never exceed 31
+data2 <-filter(data, menthlth<32)
+
+# Education ve exercise
+edu_health <- data2 %>%
+    group_by(educa) %>%
+    summarise(mn_health = mean(menthlth))
+              
+#Make the plot
+levels(edu_health$educa) <- gsub(" ", "\n", levels(edu_health$educa))
+ggplot(edu_health, aes(educa, mn_health)) +
+    geom_point(aes(educa, mn_health)) +
+    labs(title="education level vs mental health", x="education level", y="number of days with poor mental health") +
+    theme(axis.text.x = element_text(angle=45,size=8)) 
+```
+
+
+There seems to be some correlation between mental health and at least graduating high school. Further mental health benefit seems to happen after college graduation.
+
+```{r}
+# Income and mental health
+
+inc_health <- data2 %>%
+    group_by(income2) %>%
+    summarise(mn_health = mean(menthlth))
+              
+#Make the plot
+levels(inc_health$income2) <- gsub(" ", "\n", levels(inc_health$income2))
+ggplot(inc_health, aes(income2, mn_health)) +
+    geom_point(aes(income2, mn_health)) +
+    labs(title="income level vs mental health", x="education levelincome level", y="number of days with poor mental health") +
+    theme(axis.text.x = element_text(size=8)) 
+
+
+```
+
+There is a definite correlation between mental health and income level, with high-income people in the US having less poor mental health days.
+
+
+**Research question 3:** Relationship between employment status, Body Mass Index (from weight and height), and exercise in the past 30days
+
+```{r}
+# Remove Nas
+data <- filter(brfss2013, !is.na(employ1), !is.na(weight2), !is.na(height3), !is.na(exerany2))
+data<-select(data, employ1,weight2,height3,exerany2)
+# Need to convert height columns into feet/in
+data <- mutate(data, ht_str = as.character(height3))
+data<-mutate(data, ht_ft = as.numeric(substring(ht_str, 1, 1)))
+data<-mutate(data,ht_inc=as.numeric(substring(ht_str,2,4)))
+data<-mutate(data,tot_ht = ifelse(ht_ft != 9, 12*ht_ft + ht_inc, round(0.393701*ht_inc, digits = 0)))
+data<-mutate(data,weight = as.character(weight2))
+data<-mutate(data,lb = ifelse( nchar(weight) != 4, as.numeric(weight), round((as.numeric(weight) - 9000)*2.20462, digits = 0)))
+
+#Remove Na in lb
+data<-filter(data, !is.na(lb))
+data<-mutate(data,BMI=lb/(tot_ht*tot_ht)*703)
+
+    
+# Make the plot
+levels(data$employ1) <- gsub(" ", "\n", levels(data$employ1))
+ggplot(data, aes(employ1, BMI)) +
+    geom_point(aes(employ1, BMI)) +
+    labs(title="Employment Status vs BMI", x="Employment Status", y="BMI") +
+    theme(axis.text.x = element_text(size=8)) +ylim(13,50)
+
+```
+There doesn't seem any correlation between employment status and BMI. 
+
+```{r}
+ggplot(data, aes(exerany2, BMI)) +
+    geom_point(aes(exerany2, BMI)) +
+    labs(title="Exercise in the past 30 days vs BMI", x="Exercise in the past 30 days", y="BMI") +
+    theme(axis.text.x = element_text(size=8)) +ylim(13,50)
+```
+
+There doesn't seem to be any correlation between BMI and amount of exercise in the past 30 days. 
